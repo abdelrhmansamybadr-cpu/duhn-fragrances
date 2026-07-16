@@ -1,0 +1,39 @@
+# ── Sensitive config — NEVER commit real credentials ──────────────
+api/config/config.php
+
+# ── Uploaded product images (large binary files) ──────────────────
+api/uploads/
+
+# ── Deployment archives ───────────────────────────────────────────
+*.zip
+*.tar.gz
+
+# ── Admin setup script (one-time use, should not be public) ───────
+setup_admin.php
+
+# ── OS & editor junk ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ── Local dev files & scratch files ──────────────────────────────
+*.log
+*.txt
+*.gif
+inspo.php
+new/
+flutter_app/
+
+# ── Accidentally created temp files ──────────────────────────────
+$orderId])
+60)
+\`)
+fetch()
+getSetting*
+pbUpdateWC*
+{
+{,
