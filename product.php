@@ -92,6 +92,13 @@ $deliveryInfo   = $gs['delivery_info']   ?? 'Estimate delivery times: <strong>2�
 $returnInfo     = $gs['return_info']     ?? 'Return within <strong>7 days</strong> of purchase. Unused items in original packaging.';
 $shippingPolicy = $gs['shipping_policy'] ?? "Free shipping on orders over 499 EGP.\nDelivery takes 2–5 business days.\nReturns accepted within 7 days of receipt.";
 
+// Decode any HTML entities saved by old admin code (e.g. &#039; → ')
+foreach (['name', 'inspired_by', 'description', 'short_description', 'sku'] as $_f) {
+    if (!empty($product[$_f])) {
+        $product[$_f] = html_entity_decode($product[$_f], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+}
+
 // Derived values
 $price        = (float)$product['price'];
 $comparePrice = isset($product['compare_at_price']) ? (float)$product['compare_at_price'] : 0;
@@ -107,6 +114,12 @@ if (!empty($product['short_description'])) {
 }
 
 $contentBlocks = json_decode($product['content_blocks'] ?? '[]', true) ?: [];
+// Decode HTML entities in content block text/headings saved by old admin code
+foreach ($contentBlocks as &$_cb) {
+    if (!empty($_cb['heading'])) $_cb['heading'] = html_entity_decode($_cb['heading'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    if (!empty($_cb['text']))    $_cb['text']    = html_entity_decode($_cb['text'],    ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+unset($_cb);
 $topNotes   = json_decode($product['top_notes']   ?? '[]', true) ?: [];
 $heartNotes = json_decode($product['heart_notes'] ?? '[]', true) ?: [];
 $baseNotes  = json_decode($product['base_notes']  ?? '[]', true) ?: [];

@@ -80,6 +80,25 @@ $newDropsStmt = $db->query("
 ");
 $newDropProducts = $newDropsStmt->fetchAll();
 
+// Decode HTML entities stored by old admin code (e.g. &#039; → ')
+$_decodeFields = ['name', 'inspired_by', 'short_description'];
+foreach ($featuredProducts as &$_p) {
+    foreach ($_decodeFields as $_f) {
+        if (!empty($_p[$_f])) $_p[$_f] = html_entity_decode($_p[$_f], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+}
+foreach ($topRatedProducts as &$_p) {
+    foreach ($_decodeFields as $_f) {
+        if (!empty($_p[$_f])) $_p[$_f] = html_entity_decode($_p[$_f], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+}
+foreach ($newDropProducts as &$_p) {
+    foreach ($_decodeFields as $_f) {
+        if (!empty($_p[$_f])) $_p[$_f] = html_entity_decode($_p[$_f], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+}
+unset($_p, $_decodeFields, $_f);
+
 $pageTitle = 'DUHN FRAGRANCES — Indulge Your Senses';
 $pageDesc  = 'Premium Egyptian fragrance brand. Luxury 50ml perfumes inspired by the world\'s finest designers. BUY 2 GET 2 FREE.';
 $pageHome  = true;

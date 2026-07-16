@@ -73,8 +73,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $upd->execute([
                 ':slug'  => $slug,
-                ':name'  => htmlspecialchars($name),
-                ':desc'  => htmlspecialchars($desc),
+                ':name'  => $name,
+                ':desc'  => $desc,
                 ':cover' => $coverUrl,
                 ':sort'  => $sortOrder,
                 ':id'    => $id,

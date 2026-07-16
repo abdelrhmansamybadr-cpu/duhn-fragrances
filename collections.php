@@ -49,6 +49,17 @@ if ($slug) {
     ")->fetchAll();
 }
 
+// Decode HTML entities stored by old admin code (e.g. &#039; → ')
+foreach ($products as &$_p) {
+    foreach (['name', 'inspired_by', 'short_description'] as $_f) {
+        if (!empty($_p[$_f])) $_p[$_f] = html_entity_decode($_p[$_f], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+}
+unset($_p);
+if (!empty($activeCollection['name'])) {
+    $activeCollection['name'] = html_entity_decode($activeCollection['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
 $pageTitle = ($activeCollection ? htmlspecialchars($activeCollection['name']) . ' — ' : 'All Collections — ') . 'DUHN FRAGRANCES';
 require_once __DIR__ . '/public/layout/header.php';
 ?>

@@ -56,17 +56,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $ins->execute([
                 ':slug'     => $slug,
-                ':name'     => htmlspecialchars($name),
-                ':insp'     => htmlspecialchars($inspiredBy),
-                ':desc'     => htmlspecialchars($description),
-                ':sdesc'    => htmlspecialchars($shortDesc),
+                ':name'     => $name,
+                ':insp'     => $inspiredBy,
+                ':desc'     => $description,
+                ':sdesc'    => $shortDesc,
                 ':top'      => json_encode(array_values($topArr)),
                 ':heart'    => json_encode(array_values($heartArr)),
                 ':base'     => json_encode(array_values($baseArr)),
                 ':price'    => $price,
                 ':cprice'   => $comparePrice,
                 ':stock'    => $stock,
-                ':sku'      => htmlspecialchars($sku),
+                ':sku'      => $sku,
                 ':feat'     => $isFeatured,
                 ':new'      => $isNewDrop,
                 ':toprated' => $isTopRated,
@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
                 if ($bText || $bImg)
-                    $blocks[] = ['heading'=>htmlspecialchars(trim($bHeading)),'text'=>htmlspecialchars($bText),'image'=>$bImg,'layout'=>$bLayout];
+                    $blocks[] = ['heading'=>trim($bHeading),'text'=>$bText,'image'=>$bImg,'layout'=>$bLayout];
             }
             $db->prepare("UPDATE products SET content_blocks=:cb WHERE id=:id")
                ->execute([':cb'=>json_encode($blocks),':id'=>$productId]);

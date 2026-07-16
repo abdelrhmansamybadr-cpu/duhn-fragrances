@@ -44,8 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ");
             $ins->execute([
                 ':slug'  => $slug,
-                ':name'  => htmlspecialchars($name),
-                ':desc'  => htmlspecialchars($desc),
+                ':name'  => $name,
+                ':desc'  => $desc,
                 ':cover' => $coverUrl,
                 ':sort'  => $sortOrder,
             ]);
