@@ -5,10 +5,31 @@ require_once __DIR__ . '/../api/config/database.php';
 
 $db = Database::getInstance();
 
-// Auto-migrate is_hidden column
+// Auto-migrate columns
 try { $db->exec("ALTER TABLE collections ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_from_homepage TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_products TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
 
-// Handle toggle hidden
+// Handle set_visibility (4-state quick select)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'set_visibility') {
+    $tid = (int)($_POST['id'] ?? 0);
+    $vis = $_POST['vis'] ?? 'visible';
+    if ($tid > 0) {
+        $map = [
+            'visible'         => ['is_hidden' => 0, 'hide_from_homepage' => 0, 'hide_products' => 0],
+            'home_hidden'     => ['is_hidden' => 0, 'hide_from_homepage' => 1, 'hide_products' => 0],
+            'fully_hidden'    => ['is_hidden' => 1, 'hide_from_homepage' => 1, 'hide_products' => 0],
+            'hidden_products' => ['is_hidden' => 1, 'hide_from_homepage' => 1, 'hide_products' => 1],
+        ];
+        $v = $map[$vis] ?? $map['visible'];
+        $db->prepare("UPDATE collections SET is_hidden=:h, hide_from_homepage=:hh, hide_products=:hp WHERE id=:id")
+           ->execute([':h' => $v['is_hidden'], ':hh' => $v['hide_from_homepage'], ':hp' => $v['hide_products'], ':id' => $tid]);
+    }
+    header('Location: /admin/collections.php');
+    exit;
+}
+
+// Keep legacy toggle for backward compat
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'toggle_hidden') {
     $tid = (int)($_POST['id'] ?? 0);
     if ($tid > 0) {
@@ -191,24 +212,35 @@ require_once __DIR__ . '/includes/header.php';
           <div style="font-size:10px;color:var(--text-muted)">items</div>
         </td>
 
-        <!-- Visible toggle -->
+        <!-- Visibility 4-state quick select -->
         <td style="text-align:center">
-          <form method="POST" style="margin:0;display:inline">
-            <input type="hidden" name="action" value="toggle_hidden">
+          <?php
+          if (!empty($col['hide_products']) && !empty($col['is_hidden'])) {
+              $curVis = 'hidden_products';
+              $visDot = '⛔'; $visLabel = 'Hidden+Products';
+          } elseif (!empty($col['is_hidden'])) {
+              $curVis = 'fully_hidden';
+              $visDot = '🔴'; $visLabel = 'Hidden';
+          } elseif (!empty($col['hide_from_homepage'])) {
+              $curVis = 'home_hidden';
+              $visDot = '🟡'; $visLabel = 'Home hidden';
+          } else {
+              $curVis = 'visible';
+              $visDot = '🟢'; $visLabel = 'Visible';
+          }
+          ?>
+          <form method="POST" style="margin:0">
+            <input type="hidden" name="action" value="set_visibility">
             <input type="hidden" name="id" value="<?= $col['id'] ?>">
-            <button type="submit"
-                    style="background:none;border:none;cursor:pointer;padding:4px"
-                    title="<?= $col['is_hidden'] ? 'Hidden — click to show' : 'Visible — click to hide' ?>">
-              <?php if ($col['is_hidden']): ?>
-              <span style="font-size:20px" title="Hidden">🔴</span>
-              <?php else: ?>
-              <span style="font-size:20px" title="Visible">🟢</span>
-              <?php endif; ?>
-            </button>
+            <select name="vis" class="admin-input" onchange="this.form.submit()"
+                    style="font-size:11px;padding:4px 6px;text-align:center;width:130px">
+              <option value="visible"         <?= $curVis === 'visible'         ? 'selected' : '' ?>>🟢 Visible</option>
+              <option value="home_hidden"     <?= $curVis === 'home_hidden'     ? 'selected' : '' ?>>🟡 Home hidden</option>
+              <option value="fully_hidden"    <?= $curVis === 'fully_hidden'    ? 'selected' : '' ?>>🔴 Fully hidden</option>
+              <option value="hidden_products" <?= $curVis === 'hidden_products' ? 'selected' : '' ?>>⛔ Hidden + Products</option>
+            </select>
           </form>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">
-            <?= $col['is_hidden'] ? 'Hidden' : 'Visible' ?>
-          </div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:3px"><?= $visLabel ?></div>
         </td>
 
         <!-- Sort order (inline editable) -->

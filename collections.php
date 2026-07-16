@@ -8,10 +8,12 @@ require_once __DIR__ . '/api/config/database.php';
 $db   = Database::getInstance();
 $slug = preg_replace('/[^a-z0-9\-]/', '', strtolower($_GET['slug'] ?? ''));
 
-// Auto-migrate is_hidden column
+// Auto-migrate visibility columns
 try { $db->exec("ALTER TABLE collections ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_from_homepage TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_products TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
 
-// All visible collections for sidebar
+// All visible collections for sidebar (is_hidden = 0 shows even if homepage-only hidden)
 $allCollections = $db->query("
     SELECT c.*, COUNT(pc.product_id) AS product_count
     FROM collections c
@@ -41,10 +43,15 @@ if ($slug) {
         $products = $prodStmt->fetchAll();
     }
 } else {
-    // All products
+    // All products — exclude products that belong to a collection with hide_products = 1
     $products = $db->query("
         SELECT p.*, (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY sort_order LIMIT 1) AS image
         FROM products p
+        WHERE NOT EXISTS (
+            SELECT 1 FROM product_collections pc2
+            JOIN collections c2 ON c2.id = pc2.collection_id
+            WHERE pc2.product_id = p.id AND c2.hide_products = 1
+        )
         ORDER BY p.name ASC
     ")->fetchAll();
 }

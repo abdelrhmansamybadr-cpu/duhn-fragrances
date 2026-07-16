@@ -32,15 +32,17 @@ $featuredStmt = $db->query("
 ");
 $featuredProducts = $featuredStmt->fetchAll();
 
-// Auto-migrate is_hidden on collections (safe on every request)
+// Auto-migrate visibility columns
 try { $db->exec("ALTER TABLE collections ADD COLUMN is_hidden TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_from_homepage TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
+try { $db->exec("ALTER TABLE collections ADD COLUMN hide_products TINYINT(1) NOT NULL DEFAULT 0"); } catch (Throwable $_) {}
 
-// Fetch visible collections only
+// Fetch collections visible on homepage (is_hidden=0 AND hide_from_homepage=0)
 $collectionsStmt = $db->query("
     SELECT c.*, COUNT(pc.product_id) AS product_count
     FROM collections c
     LEFT JOIN product_collections pc ON pc.collection_id = c.id
-    WHERE c.is_hidden = 0
+    WHERE c.is_hidden = 0 AND c.hide_from_homepage = 0
     GROUP BY c.id ORDER BY c.sort_order ASC
 ");
 $collections = $collectionsStmt->fetchAll();

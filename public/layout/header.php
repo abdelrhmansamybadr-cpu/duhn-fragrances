@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿i <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -144,13 +144,42 @@ $_annText = htmlspecialchars($_annText);
       <?php endif; ?>
     </a>
 
-    <!-- Nav Links (desktop) -->
+    <!-- Nav Links (desktop) — loaded from DB, falls back to defaults -->
+    <?php
+    $_navLinks = [];
+    try {
+        $_navRow = Database::getInstance()->query(
+            "SELECT `value` FROM `settings` WHERE `key` = 'nav_links' LIMIT 1"
+        )->fetch();
+        if ($_navRow && !empty($_navRow['value'])) {
+            $_parsed = json_decode($_navRow['value'], true);
+            if (is_array($_parsed)) $_navLinks = $_parsed;
+        }
+    } catch (Throwable $_ne) {}
+    // Default fallback
+    if (empty($_navLinks)) {
+        $_navLinks = [
+            ['label' => 'Home',        'url' => '/index.php',                       'is_visible' => true],
+            ['label' => 'NEW DROPS',   'url' => '/collections.php?slug=new-drops',  'is_visible' => true],
+            ['label' => 'For Him',     'url' => '/collections.php?slug=for-him',     'is_visible' => true],
+            ['label' => 'For Her',     'url' => '/collections.php?slug=for-her',     'is_visible' => true],
+            ['label' => 'Bestsellers', 'url' => '/collections.php?slug=bestsellers', 'is_visible' => true],
+        ];
+    }
+    $_currentPage = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    ?>
     <ul class="nav-links" id="nav-links">
-      <li><a href="/index.php" class="<?= (basename($_SERVER['PHP_SELF']) === 'index.php') ? 'active' : '' ?>">Home</a></li>
-      <li><a href="/collections.php?slug=new-drops">NEW DROPS</a></li>
-      <li><a href="/collections.php?slug=for-him">For Him</a></li>
-      <li><a href="/collections.php?slug=for-her">For Her</a></li>
-      <li><a href="/collections.php?slug=bestsellers">Bestsellers</a></li>
+      <?php foreach ($_navLinks as $_nl):
+        if (empty($_nl['is_visible'])) continue;
+        $_nlUrl   = htmlspecialchars($_nl['url']   ?? '/');
+        $_nlLabel = htmlspecialchars($_nl['label']  ?? '');
+        // Mark active: match path portion of URL
+        $_nlPath  = parse_url($_nl['url'] ?? '/', PHP_URL_PATH);
+        $_nlActive = ($_nlPath === $_currentPage && $_nlPath !== '/index.php') ||
+                     ($_nlPath === '/index.php' && $_currentPage === '/index.php');
+      ?>
+      <li><a href="<?= $_nlUrl ?>" class="<?= $_nlActive ? 'active' : '' ?>"><?= $_nlLabel ?></a></li>
+      <?php endforeach; ?>
     </ul>
 
     <!-- Nav Actions -->

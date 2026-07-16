@@ -124,31 +124,62 @@ class CartController
             }
         }
 
-        // ── 3. Wallet discount (per-product, for subscriber) ─────────
+        // ── 3. Wallet discount (mode-aware, for subscriber) ──────────
         if (!$promoActive) {
             $walletEmail = $_SESSION['wallet_email'] ?? null;
             if ($walletEmail) {
                 try {
-                    $wEnabled  = $this->getSetting('wallet_enabled', '0');
-                    $wAmount   = (float)$this->getSetting('wallet_discount_per_product', '50');
+                    $wEnabled = $this->getSetting('wallet_enabled', '0');
+                    $wAmount  = (float)$this->getSetting('wallet_discount_per_product', '50');
+                    $wMode    = $this->getSetting('wallet_discount_mode', 'per_product');
+
                     if ($wEnabled === '1' && $wAmount > 0 && $itemCount > 0) {
-                        $usedStmt = $this->db->prepare(
-                            "SELECT product_id FROM wallet_product_uses WHERE subscriber_email = :e"
-                        );
-                        $usedStmt->execute([':e' => $walletEmail]);
-                        $usedPids = array_column($usedStmt->fetchAll(\PDO::FETCH_ASSOC), 'product_id');
-                        $eligibleCount = 0;
-                        foreach ($items as $item) {
-                            if (!in_array((int)$item['product_id'], array_map('intval', $usedPids))) {
-                                $eligibleCount++;
+
+                        if ($wMode === 'percentage') {
+                            // ── Mode A: X% off order subtotal every order ────
+                            $walletTotal = min(round($subtotal * ($wAmount / 100), 2), $subtotal);
+                            if ($walletTotal > 0) {
+                                $discount    = $walletTotal;
+                                $promoActive = true;
+                                $promoLabel  = '💰 ' . number_format($wAmount, 0) . '% wallet discount applied';
+                                $promoCode   = 'WALLET';
                             }
-                        }
-                        if ($eligibleCount > 0) {
-                            $walletTotal = min($eligibleCount * $wAmount, $subtotal);
-                            $discount    = $walletTotal;
-                            $promoActive = true;
-                            $promoLabel  = '💰 ' . $eligibleCount . ' product' . ($eligibleCount > 1 ? 's' : '') . ' × ' . number_format($wAmount, 0) . ' EGP wallet discount';
-                            $promoCode   = 'WALLET';
+
+                        } elseif ($wMode === 'wallet_credit') {
+                            // ── Mode B: X EGP credit on total — first order only ──
+                            $usedCountStmt = $this->db->prepare(
+                                "SELECT COUNT(*) FROM wallet_product_uses WHERE subscriber_email = :e"
+                            );
+                            $usedCountStmt->execute([':e' => $walletEmail]);
+                            $usedCount = (int)$usedCountStmt->fetchColumn();
+                            if ($usedCount === 0) {
+                                $walletTotal = min($wAmount, $subtotal);
+                                $discount    = $walletTotal;
+                                $promoActive = true;
+                                $promoLabel  = '💰 ' . number_format($wAmount, 0) . ' EGP welcome credit (first order)';
+                                $promoCode   = 'WALLET';
+                            }
+
+                        } else {
+                            // ── Mode C: per_product — X EGP per new product (default) ──
+                            $usedStmt = $this->db->prepare(
+                                "SELECT product_id FROM wallet_product_uses WHERE subscriber_email = :e"
+                            );
+                            $usedStmt->execute([':e' => $walletEmail]);
+                            $usedPids = array_column($usedStmt->fetchAll(\PDO::FETCH_ASSOC), 'product_id');
+                            $eligibleCount = 0;
+                            foreach ($items as $item) {
+                                if (!in_array((int)$item['product_id'], array_map('intval', $usedPids))) {
+                                    $eligibleCount++;
+                                }
+                            }
+                            if ($eligibleCount > 0) {
+                                $walletTotal = min($eligibleCount * $wAmount, $subtotal);
+                                $discount    = $walletTotal;
+                                $promoActive = true;
+                                $promoLabel  = '💰 ' . $eligibleCount . ' product' . ($eligibleCount > 1 ? 's' : '') . ' × ' . number_format($wAmount, 0) . ' EGP wallet discount';
+                                $promoCode   = 'WALLET';
+                            }
                         }
                     }
                 } catch (Throwable $_walletErr) {}

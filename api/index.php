@@ -276,19 +276,22 @@ try {
 
         $walletEnabled2  = '1';
         $walletDiscount2 = 50;
+        $walletMode2     = 'per_product';
         try {
-            $wRows2 = $db->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('wallet_enabled','wallet_discount_per_product')")->fetchAll();
+            $wRows2 = $db->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('wallet_enabled','wallet_discount_per_product','wallet_discount_mode')")->fetchAll();
             foreach ($wRows2 as $wR2) {
-                if ($wR2['key'] === 'wallet_enabled') $walletEnabled2 = $wR2['value'];
+                if ($wR2['key'] === 'wallet_enabled')              $walletEnabled2  = $wR2['value'];
                 if ($wR2['key'] === 'wallet_discount_per_product') $walletDiscount2 = (int)$wR2['value'];
+                if ($wR2['key'] === 'wallet_discount_mode')        $walletMode2     = $wR2['value'];
             }
         } catch (Throwable $_) {}
 
         ResponseHelper::success([
-            'already'          => true,
-            'wallet_enabled'   => $walletEnabled2 === '1',
-            'wallet_discount'  => $walletDiscount2,
-            'wallet_email'     => $email,
+            'already'               => true,
+            'wallet_enabled'        => $walletEnabled2 === '1',
+            'wallet_discount'       => $walletDiscount2,
+            'wallet_discount_mode'  => $walletMode2,
+            'wallet_email'          => $email,
         ], 'You are already subscribed! Check your inbox for your discount code.');
         }
 
@@ -308,9 +311,20 @@ try {
         $db->prepare("INSERT INTO newsletter_subscribers (email, promo_code, email_sent) VALUES (:e, :c, 0)")
            ->execute([':e' => $email, ':c' => $code]);
 
+        // Fetch wallet mode for email
+        $wModeForEmail  = 'per_product';
+        $wValueForEmail = 50;
+        try {
+            $wEmailRows = $db->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('wallet_discount_mode','wallet_discount_per_product')")->fetchAll();
+            foreach ($wEmailRows as $wEr) {
+                if ($wEr['key'] === 'wallet_discount_mode')        $wModeForEmail  = $wEr['value'];
+                if ($wEr['key'] === 'wallet_discount_per_product') $wValueForEmail = (int)$wEr['value'];
+            }
+        } catch (Throwable $_) {}
+
         // Send welcome email
         require_once __DIR__ . '/helpers/Mailer.php';
-        $sent = Mailer::sendWelcomePromoEmail($email, $code);
+        $sent = Mailer::sendWelcomePromoEmail($email, $code, $wModeForEmail, $wValueForEmail);
 
         // Mark email as sent
         if ($sent) {
@@ -340,7 +354,7 @@ try {
         } catch (Throwable $_) {}
         try {
             $db->prepare("INSERT IGNORE INTO settings (`key`,`value`) VALUES
-                ('wallet_enabled','1'),('wallet_discount_per_product','50')")
+                ('wallet_enabled','1'),('wallet_discount_per_product','50'),('wallet_discount_mode','per_product')")
                ->execute();
         } catch (Throwable $_) {}
 
@@ -351,22 +365,34 @@ try {
         // Get wallet settings for response
         $walletEnabled  = '1';
         $walletDiscount = 50;
+        $walletMode     = 'per_product';
         try {
-            $wRows = $db->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('wallet_enabled','wallet_discount_per_product')")->fetchAll();
+            $wRows = $db->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('wallet_enabled','wallet_discount_per_product','wallet_discount_mode')")->fetchAll();
             foreach ($wRows as $wR) {
-                if ($wR['key'] === 'wallet_enabled') $walletEnabled = $wR['value'];
+                if ($wR['key'] === 'wallet_enabled')              $walletEnabled  = $wR['value'];
                 if ($wR['key'] === 'wallet_discount_per_product') $walletDiscount = (int)$wR['value'];
+                if ($wR['key'] === 'wallet_discount_mode')        $walletMode     = $wR['value'];
             }
         } catch (Throwable $_) {}
 
+        // Build success message reflecting active mode
+        if ($walletMode === 'percentage') {
+            $successMsg = "Subscribed! Your welcome discount code + {$walletDiscount}% wallet discount have been sent to your email.";
+        } elseif ($walletMode === 'wallet_credit') {
+            $successMsg = "Subscribed! Your welcome discount code + {$walletDiscount} EGP wallet credit (first order) have been sent to your email.";
+        } else {
+            $successMsg = "Subscribed! Your welcome discount code + {$walletDiscount} EGP wallet discount per product have been sent to your email.";
+        }
+
         ResponseHelper::success(
             [
-                'code'             => $code,
-                'wallet_enabled'   => $walletEnabled === '1',
-                'wallet_discount'  => $walletDiscount,
-                'wallet_email'     => $email,
+                'code'                  => $code,
+                'wallet_enabled'        => $walletEnabled === '1',
+                'wallet_discount'       => $walletDiscount,
+                'wallet_discount_mode'  => $walletMode,
+                'wallet_email'          => $email,
             ],
-            'Subscribed! Your 20% discount code has been sent to your email.'
+            $successMsg
         );
     }
 

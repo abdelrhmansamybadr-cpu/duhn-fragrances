@@ -151,7 +151,7 @@ require_once __DIR__ . '/public/layout/header.php';
   <!-- ══════════════════════════════════════════════════════════════ -->
   <!--  GUEST VIEW                                                    -->
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <div id="guest-view" style="display:none">
+  <div id="guest-view">
     <h1 style="font-size:30px;font-weight:700;color:#1A1A1A;margin-bottom:6px">My Account</h1>
     <p style="color:#888888;margin-bottom:40px;text-decoration:none">Sign in to view your orders and manage your profile.</p>
 

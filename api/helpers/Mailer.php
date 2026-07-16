@@ -337,7 +337,7 @@ class Mailer
     }
 
     // ── Welcome / newsletter promo email ─────────────────────────────
-    public static function sendWelcomePromoEmail(string $toEmail, string $promoCode, int $discountPct = 20): bool
+    public static function sendWelcomePromoEmail(string $toEmail, string $promoCode, string $discountMode = 'per_product', int $discountValue = 20): bool
     {
         try {
             $db   = Database::getInstance();
@@ -355,8 +355,14 @@ class Mailer
             $smtpUser = trim($s['smtp_user']        ?? '');
             $smtpPass = trim($s['smtp_pass']        ?? '');
 
-            $subject = "Your {$discountPct}% Discount Code is Here — DUHN FRAGRANCES";
-            $body    = self::buildWelcomeEmailBody($promoCode, $discountPct);
+            if ($discountMode === 'percentage') {
+                $subject = "Your {$discountValue}% Wallet Discount is Active — DUHN FRAGRANCES";
+            } elseif ($discountMode === 'wallet_credit') {
+                $subject = "Your {$discountValue} EGP Welcome Credit is Ready — DUHN FRAGRANCES";
+            } else {
+                $subject = "Your Welcome Code + Wallet Discount are Here — DUHN FRAGRANCES";
+            }
+            $body = self::buildWelcomeEmailBody($promoCode, $discountMode, $discountValue);
 
             if ($smtpHost && $smtpUser && $smtpPass) {
                 return self::smtpSend(
@@ -377,10 +383,33 @@ class Mailer
         }
     }
 
-    private static function buildWelcomeEmailBody(string $promoCode, int $pct): string
+    private static function buildWelcomeEmailBody(string $promoCode, string $discountMode = 'per_product', int $discountValue = 20): string
     {
         $shopUrl  = defined('APP_URL') ? APP_URL : 'https://duhnfragrances.com';
         $codeHtml = htmlspecialchars($promoCode);
+
+        // Build mode-specific hero text and description
+        if ($discountMode === 'percentage') {
+            $heroLabel    = $discountValue . '% OFF every order';
+            $heroBig      = 'Your <span style="color:#c9a227">' . $discountValue . '% Wallet Discount</span> is Active';
+            $descHtml     = 'As a subscriber, <strong style="color:#1a1a1a">' . $discountValue . '% is automatically deducted</strong> from every order you place — no code needed for the discount.';
+            $codeNote     = 'Plus use this one-time welcome code for an extra bonus at checkout:';
+            $walletNote   = 'Wallet discount &middot; Applied automatically every order &middot; All fragrances';
+        } elseif ($discountMode === 'wallet_credit') {
+            $heroLabel    = $discountValue . ' EGP Welcome Credit';
+            $heroBig      = 'Your <span style="color:#c9a227">' . $discountValue . ' EGP Credit</span> Awaits';
+            $descHtml     = 'As a subscriber, you get <strong style="color:#1a1a1a">' . $discountValue . ' EGP off your first order total</strong> — automatically applied in the cart.';
+            $codeNote     = 'Plus use this one-time welcome code for an extra bonus at checkout:';
+            $walletNote   = 'One-time credit &middot; First order only &middot; Applied automatically';
+        } else {
+            // per_product (default)
+            $heroLabel    = $discountValue . ' EGP off every new product';
+            $heroBig      = 'Your <span style="color:#c9a227">' . $discountValue . ' EGP Wallet Discount</span> is Active';
+            $descHtml     = 'As a subscriber, you save <strong style="color:#1a1a1a">' . $discountValue . ' EGP on each new product</strong> you buy — applied automatically in the cart every order.';
+            $codeNote     = 'Plus use this one-time welcome code for an extra bonus at checkout:';
+            $walletNote   = 'Wallet discount &middot; Per new product &middot; Applied automatically';
+        }
+
         return '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f5f2ec;font-family:Arial,sans-serif">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f2ec;padding:40px 0">
@@ -397,25 +426,27 @@ class Mailer
       <!-- Hero strip -->
       <tr><td style="background:#fffdf5;border-bottom:3px solid #F8C417;padding:32px 36px;text-align:center">
         <p style="margin:0 0 8px;font-size:13px;color:#999;text-transform:uppercase;letter-spacing:0.1em">Thank you for subscribing</p>
-        <p style="margin:0;font-size:26px;font-weight:700;color:#1a1a1a;line-height:1.3">
-          Here is your<br><span style="color:#c9a227">' . $pct . '% OFF</span> code
-        </p>
+        <p style="margin:0;font-size:26px;font-weight:700;color:#1a1a1a;line-height:1.3">' . $heroBig . '</p>
       </td></tr>
 
-      <!-- Promo code box -->
-      <tr><td style="padding:36px 36px 20px;text-align:center">
-        <p style="margin:0 0 16px;font-size:14px;color:#555">
-          Use this code at checkout to get <strong style="color:#1a1a1a">' . $pct . '% off</strong> your entire order:
-        </p>
+      <!-- Wallet benefit description -->
+      <tr><td style="padding:28px 36px 8px;text-align:center">
+        <p style="margin:0;font-size:14px;color:#555;line-height:1.6">' . $descHtml . '</p>
+      </td></tr>
+
+      <!-- Welcome promo code -->
+      <tr><td style="padding:16px 36px 28px;text-align:center">
+        <p style="margin:0 0 14px;font-size:13px;color:#888">' . $codeNote . '</p>
         <div style="display:inline-block;background:#1a1a1a;border-radius:10px;padding:18px 40px;margin:0 auto">
           <p style="margin:0;font-size:28px;font-weight:700;color:#F8C417;letter-spacing:0.18em;font-family:Courier New,monospace">'
              . $codeHtml . '</p>
         </div>
-        <p style="margin:16px 0 0;font-size:12px;color:#aaa">Single-use &middot; No minimum order &middot; All fragrances</p>
+        <p style="margin:14px 0 0;font-size:12px;color:#aaa">Single-use &middot; No minimum order &middot; All fragrances</p>
+        <p style="margin:6px 0 0;font-size:11px;color:#bbb">' . $walletNote . '</p>
       </td></tr>
 
       <!-- CTA -->
-      <tr><td style="padding:20px 36px 36px;text-align:center">
+      <tr><td style="padding:8px 36px 36px;text-align:center">
         <a href="' . $shopUrl . '/collections.php"
            style="display:inline-block;padding:15px 44px;background:#F8C417;color:#1a1a1a;
                   font-size:14px;font-weight:700;text-decoration:none;border-radius:8px;

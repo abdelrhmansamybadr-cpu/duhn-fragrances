@@ -57,6 +57,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             save($db, 'nl_popup_delay',              (string)max(0, (int)($_POST['nl_popup_delay'] ?? 1800)));
             save($db, 'wallet_enabled',              isset($_POST['wallet_enabled'])             ? '1' : '0');
             save($db, 'wallet_discount_per_product', (string)max(0, (int)($_POST['wallet_discount_per_product'] ?? 50)));
+            $wMode = $_POST['wallet_discount_mode'] ?? 'per_product';
+            save($db, 'wallet_discount_mode', in_array($wMode, ['per_product','percentage','wallet_credit']) ? $wMode : 'per_product');
             $success = 'Newsletter popup settings saved.';
         } catch (Throwable $e) { $error = $e->getMessage(); }
     }
@@ -274,7 +276,7 @@ $ts = time();
         <h4 style="font-size:13px;font-weight:700;margin-bottom:4px;color:var(--accent);display:flex;align-items:center;gap:6px">
           <i class="ph ph-wallet"></i> Subscriber Wallet Discount
         </h4>
-        <p style="font-size:11px;color:var(--text-muted);margin-bottom:18px">When enabled, subscribers get a fixed discount per product on every order — except products they've already purchased.</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:18px">When enabled, subscribers get a discount applied automatically in the cart. Choose the discount mode below.</p>
 
         <div class="admin-form-group">
           <label style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
@@ -287,16 +289,84 @@ $ts = time();
           <p style="font-size:11px;color:var(--text-muted)">Subscribers see their discount automatically applied in the cart.</p>
         </div>
 
+        <?php $wMode = $s['wallet_discount_mode'] ?? 'per_product'; ?>
         <div class="admin-form-group">
-          <label class="admin-label">Discount Per Product (EGP)</label>
-          <div style="display:flex;align-items:center;gap:12px">
-            <input type="number" name="wallet_discount_per_product" class="admin-input" style="max-width:140px"
-                   value="<?= (int)($s['wallet_discount_per_product'] ?? 50) ?>" min="0" step="5">
-            <span style="font-size:12px;color:var(--text-muted)">EGP per eligible product</span>
+          <label class="admin-label">Discount Mode</label>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--admin-border);background:<?= $wMode==='per_product' ? 'rgba(201,162,39,.08)' : 'transparent' ?>">
+              <input type="radio" name="wallet_discount_mode" value="per_product" onchange="walletModeChange()" <?= $wMode==='per_product' ? 'checked' : '' ?> style="margin-top:2px;accent-color:var(--accent)">
+              <div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">Fixed EGP Per Eligible Product</span>
+                <p style="margin:2px 0 0;font-size:11px;color:var(--text-muted)">Subscriber saves X EGP on each product they haven't bought before — applied on every order.</p>
+              </div>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--admin-border);background:<?= $wMode==='percentage' ? 'rgba(201,162,39,.08)' : 'transparent' ?>">
+              <input type="radio" name="wallet_discount_mode" value="percentage" onchange="walletModeChange()" <?= $wMode==='percentage' ? 'checked' : '' ?> style="margin-top:2px;accent-color:var(--accent)">
+              <div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">Percentage of Order Total (%)</span>
+                <p style="margin:2px 0 0;font-size:11px;color:var(--text-muted)">Subscriber gets X% off their total order subtotal — applied on every order.</p>
+              </div>
+            </label>
+
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border-radius:8px;border:1px solid var(--admin-border);background:<?= $wMode==='wallet_credit' ? 'rgba(201,162,39,.08)' : 'transparent' ?>">
+              <input type="radio" name="wallet_discount_mode" value="wallet_credit" onchange="walletModeChange()" <?= $wMode==='wallet_credit' ? 'checked' : '' ?> style="margin-top:2px;accent-color:var(--accent)">
+              <div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary)">One-Time Wallet Credit (EGP) — First Order Only</span>
+                <p style="margin:2px 0 0;font-size:11px;color:var(--text-muted)">Subscriber gets X EGP off their first order total. Applied once and never again.</p>
+              </div>
+            </label>
+
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin-top:4px">E.g. 50 = subscriber saves 50 EGP on each new product they buy.</p>
+        </div>
+
+        <div class="admin-form-group" style="margin-top:14px">
+          <label class="admin-label" id="wallet-value-label"><?php
+            if ($wMode === 'percentage') echo 'Discount Percentage (%)';
+            elseif ($wMode === 'wallet_credit') echo 'Wallet Credit Amount (EGP)';
+            else echo 'Discount Per Product (EGP)';
+          ?></label>
+          <div style="display:flex;align-items:center;gap:12px">
+            <input type="number" name="wallet_discount_per_product" id="wallet-value-input" class="admin-input" style="max-width:140px"
+                   value="<?= (int)($s['wallet_discount_per_product'] ?? 50) ?>" min="0" step="5">
+            <span id="wallet-value-unit" style="font-size:12px;color:var(--text-muted)"><?php
+              if ($wMode === 'percentage') echo '% of order subtotal';
+              elseif ($wMode === 'wallet_credit') echo 'EGP off first order total';
+              else echo 'EGP per eligible product';
+            ?></span>
+          </div>
+          <p id="wallet-value-hint" style="font-size:11px;color:var(--text-muted);margin-top:4px"><?php
+            if ($wMode === 'percentage') echo 'E.g. 10 = subscriber saves 10% on every order they make.';
+            elseif ($wMode === 'wallet_credit') echo 'E.g. 50 = subscriber gets 50 EGP off their very first order only.';
+            else echo 'E.g. 50 = subscriber saves 50 EGP on each new product they buy.';
+          ?></p>
         </div>
       </div>
+      <script>
+      function walletModeChange() {
+        const mode  = document.querySelector('input[name="wallet_discount_mode"]:checked')?.value || 'per_product';
+        const label = document.getElementById('wallet-value-label');
+        const unit  = document.getElementById('wallet-value-unit');
+        const hint  = document.getElementById('wallet-value-hint');
+        document.querySelectorAll('input[name="wallet_discount_mode"]').forEach(r => {
+          r.closest('label').style.background = r.checked ? 'rgba(201,162,39,.08)' : 'transparent';
+        });
+        if (mode === 'percentage') {
+          label.textContent = 'Discount Percentage (%)';
+          unit.textContent  = '% of order subtotal';
+          hint.textContent  = 'E.g. 10 = subscriber saves 10% on every order they make.';
+        } else if (mode === 'wallet_credit') {
+          label.textContent = 'Wallet Credit Amount (EGP)';
+          unit.textContent  = 'EGP off first order total';
+          hint.textContent  = 'E.g. 50 = subscriber gets 50 EGP off their very first order only.';
+        } else {
+          label.textContent = 'Discount Per Product (EGP)';
+          unit.textContent  = 'EGP per eligible product';
+          hint.textContent  = 'E.g. 50 = subscriber saves 50 EGP on each new product they buy.';
+        }
+      }
+      </script>
 
     </div>
   </form>

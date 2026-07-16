@@ -349,6 +349,9 @@
     <a href="/admin/homepage-sections.php" class="sidebar-link <?= strpos($_SERVER['PHP_SELF'], 'homepage-sections') !== false ? 'active' : '' ?>">
       <i class="ph ph-layout"></i> Homepage Sections
     </a>
+    <a href="/admin/nav-links.php" class="sidebar-link <?= strpos($_SERVER['PHP_SELF'], 'nav-links') !== false ? 'active' : '' ?>">
+      <i class="ph ph-list"></i> Navigation Links
+    </a>
     <a href="/admin/pages.php" class="sidebar-link <?= strpos($_SERVER['PHP_SELF'], 'admin/pages') !== false ? 'active' : '' ?>">
       <i class="ph ph-file-text"></i> Page Editor
     </a>
