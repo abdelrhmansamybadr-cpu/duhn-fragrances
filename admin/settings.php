@@ -50,6 +50,52 @@ function sanitizeHeroText(string $html): string {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
+    // ── Save Kashier payment gateway settings ─────────────────────
+    if (isset($_POST['save_kashier'])) {
+        $kMid    = trim($_POST['kashier_mid']     ?? '');
+        $kApiKey = trim($_POST['kashier_api_key'] ?? '');
+        $kMode   = in_array($_POST['kashier_mode'] ?? '', ['test','live']) ? $_POST['kashier_mode'] : 'test';
+
+        try {
+            saveSetting($db, 'kashier_mid',  $kMid);
+            saveSetting($db, 'kashier_mode', $kMode);
+            if ($kApiKey) saveSetting($db, 'kashier_api_key', $kApiKey);
+
+            // Test connection if both credentials provided
+            $kTestMsg = '';
+            $kTestOk  = false;
+            if ($kMid && ($kApiKey ?: ($settings['kashier_api_key'] ?? ''))) {
+                $kKeyToTest = $kApiKey ?: ($settings['kashier_api_key'] ?? '');
+                $kOrdId     = 'TEST-' . time();
+                $kAmount    = '1.00';
+                $kCurrency  = 'EGP';
+                $kPath      = "/?payment={$kMid}.{$kOrdId}.{$kAmount}.{$kCurrency}";
+                $kHash      = hash_hmac('sha256', $kPath, $kKeyToTest, false);
+                $kUrl       = "https://checkout.kashier.io/?merchantId={$kMid}&orderId={$kOrdId}&amount={$kAmount}&currency={$kCurrency}&hash={$kHash}&mode={$kMode}";
+                $kCtx       = stream_context_create(['http'=>['timeout'=>6,'ignore_errors'=>true,'method'=>'GET'],'ssl'=>['verify_peer'=>false]]);
+                $kResp      = @file_get_contents($kUrl, false, $kCtx);
+                if ($kResp === false) {
+                    $kTestMsg = '⚠️ Could not reach Kashier servers. Check server internet access.';
+                } elseif (stripos($kResp, 'invalid merchant') !== false || stripos($kResp, 'merchant not found') !== false) {
+                    $kTestMsg = '❌ Invalid Merchant ID. Please check your MID.';
+                } elseif (stripos($kResp, 'invalid hash') !== false || stripos($kResp, 'hash mismatch') !== false) {
+                    $kTestMsg = '❌ Invalid API Key (hash mismatch). Please check your API key.';
+                } else {
+                    $kTestMsg = '✅ Connected to Kashier! Ready to accept online payments.';
+                    $kTestOk  = true;
+                    saveSetting($db, 'kashier_verified', '1');
+                }
+            }
+
+            // Reload settings
+            $rows = $db->query("SELECT `key`, `value` FROM `settings`")->fetchAll();
+            $settings = [];
+            foreach ($rows as $row) { $settings[$row['key']] = $row['value']; }
+
+            $success = 'Kashier settings saved.' . ($kTestMsg ? ' ' . $kTestMsg : '');
+        } catch (Throwable $e) { $error = $e->getMessage(); }
+    }
+
     // ── Save social proof settings ────────────────────────────────
     if (isset($_POST['save_social_proof'])) {
         try {
@@ -1329,5 +1375,104 @@ function removeLogo() {
 document.addEventListener('DOMContentLoaded', updateLogoPreview);
 document.querySelectorAll('input[name="logo_mode"]').forEach(r => r.addEventListener('change', updateLogoPreview));
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PAYMENT GATEWAY — KASHIER.IO
+══════════════════════════════════════════════════════════════ -->
+<div style="margin-top:40px">
+  <h2 style="font-size:16px;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:10px">
+    <i class="ph ph-credit-card" style="color:var(--accent)"></i> Payment Gateway
+  </h2>
+
+  <?php
+  $kMid      = $settings['kashier_mid']      ?? '';
+  $kMode     = $settings['kashier_mode']     ?? 'test';
+  $kVerified = $settings['kashier_verified'] ?? '0';
+  $kHasKey   = !empty($settings['kashier_api_key']);
+  $kEnabled  = $kMid && $kHasKey;
+  ?>
+
+  <form method="POST">
+    <input type="hidden" name="save_kashier" value="1">
+    <div class="admin-card" style="max-width:640px">
+
+      <!-- Status badge -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--admin-border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:14px;font-weight:700;letter-spacing:.05em">Kashier.io</span>
+          <span style="font-size:11px;color:#888">Egypt's leading payment gateway</span>
+        </div>
+        <?php if ($kEnabled && $kVerified === '1'): ?>
+        <span style="background:rgba(40,167,69,.15);color:#28a745;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid rgba(40,167,69,.3)">
+          ✅ Active
+        </span>
+        <?php elseif ($kEnabled): ?>
+        <span style="background:rgba(255,193,7,.15);color:#ffc107;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid rgba(255,193,7,.3)">
+          ⚠️ Not Verified
+        </span>
+        <?php else: ?>
+        <span style="background:rgba(136,136,136,.15);color:#888;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid rgba(136,136,136,.3)">
+          ⬜ Not Configured
+        </span>
+        <?php endif; ?>
+      </div>
+
+      <div class="admin-form-group">
+        <label class="admin-label">Merchant ID (MID)</label>
+        <input type="text" name="kashier_mid" class="admin-input"
+               value="<?= htmlspecialchars($kMid) ?>"
+               placeholder="MID-XXXX-XXXX">
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Found in your Kashier merchant portal → Account → under your username.
+        </p>
+      </div>
+
+      <div class="admin-form-group">
+        <label class="admin-label">
+          API Key (Payment Secret)
+          <?= $kHasKey ? '<span style="color:var(--success);font-size:11px;font-weight:400">✓ saved</span>' : '' ?>
+        </label>
+        <input type="password" name="kashier_api_key" class="admin-input"
+               placeholder="<?= $kHasKey ? '••••••••••••••••••••' : 'Paste your Kashier API key' ?>"
+               autocomplete="new-password">
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">
+          Found in Kashier portal → Developers → API Keys. Used to sign payment hashes. Never shown publicly.
+        </p>
+      </div>
+
+      <div class="admin-form-group">
+        <label class="admin-label">Mode</label>
+        <div style="display:flex;gap:12px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 18px;border-radius:8px;border:1.5px solid <?= $kMode==='test' ? 'var(--accent)' : 'var(--admin-border)' ?>;background:<?= $kMode==='test' ? 'rgba(248,196,23,.08)' : 'transparent' ?>">
+            <input type="radio" name="kashier_mode" value="test" <?= $kMode==='test' ? 'checked' : '' ?> style="accent-color:var(--accent)">
+            <div>
+              <span style="font-weight:600;font-size:13px">🧪 Test Mode</span>
+              <p style="margin:0;font-size:11px;color:var(--text-muted)">Use Kashier test cards — no real charges</p>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 18px;border-radius:8px;border:1.5px solid <?= $kMode==='live' ? '#28a745' : 'var(--admin-border)' ?>;background:<?= $kMode==='live' ? 'rgba(40,167,69,.08)' : 'transparent' ?>">
+            <input type="radio" name="kashier_mode" value="live" <?= $kMode==='live' ? 'checked' : '' ?> style="accent-color:#28a745">
+            <div>
+              <span style="font-weight:600;font-size:13px">🟢 Live Mode</span>
+              <p style="margin:0;font-size:11px;color:var(--text-muted)">Real customer payments</p>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div style="padding:12px 14px;background:rgba(248,196,23,.06);border:1px solid rgba(248,196,23,.2);border-radius:8px;font-size:12px;color:var(--text-muted);margin-bottom:18px">
+        <strong style="color:var(--accent)">📋 Setup:</strong>
+        Your Kashier callback URL (enter in Kashier portal under Redirect URL / Webhook):<br>
+        <code style="color:#F8C417;background:rgba(255,255,255,0.06);padding:3px 8px;border-radius:4px;display:inline-block;margin-top:4px;font-size:11px">
+          <?= defined('APP_URL') ? APP_URL : 'https://duhnfragrances.com' ?>/kashier-callback.php
+        </code>
+      </div>
+
+      <button type="submit" class="btn-admin-gold" style="width:100%">
+        <i class="ph ph-plugs-connected"></i> Save & Test Connection
+      </button>
+    </div>
+  </form>
+</div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -1,22 +1,63 @@
 ﻿<?php
-$orderNum  = htmlspecialchars($_GET['order'] ?? '');
-$total     = htmlspecialchars($_GET['total'] ?? '');
-$acctType  = htmlspecialchars($_GET['acct']  ?? '');
-$pageTitle = 'Order Confirmed — DUHN FRAGRANCES';
+$orderNum    = htmlspecialchars($_GET['order']   ?? '');
+$total       = htmlspecialchars($_GET['total']   ?? '');
+$acctType    = htmlspecialchars($_GET['acct']    ?? '');
+$paymentRes  = htmlspecialchars($_GET['payment'] ?? '');   // 'success' | 'failed' | ''
+$pageTitle   = ($paymentRes === 'failed') ? 'Payment Failed — DUHN FRAGRANCES' : 'Order Confirmed — DUHN FRAGRANCES';
 require_once __DIR__ . '/public/layout/header.php';
 require_once __DIR__ . '/public/layout/loader.php';
 ?>
 
 <div class="container" style="padding:80px 0;max-width:580px">
 
+  <?php if ($paymentRes === 'failed'): ?>
+  <!-- ── Payment failed icon ───────────────────────────────────── -->
+  <div style="text-align:center;margin-bottom:32px">
+    <div style="width:80px;height:80px;background:rgba(220,53,69,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;border:2px solid #dc3545">
+      <i class="ph ph-x-circle" style="font-size:40px;color:#dc3545"></i>
+    </div>
+    <h1 style="font-size:28px;font-weight:700;margin-bottom:8px;color:#dc3545">Payment Failed</h1>
+    <p style="color:var(--text-muted);font-size:15px">Your card payment was not completed. Your order has been saved — you can retry or choose Cash on Delivery.</p>
+  </div>
+
+  <!-- ── Retry options ────────────────────────────────────────── -->
+  <div style="background:rgba(220,53,69,0.06);border:1px solid rgba(220,53,69,0.2);border-radius:var(--radius);padding:20px;margin-bottom:24px;text-align:center">
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">What would you like to do?</p>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <a href="/checkout.php" class="btn btn-gold btn-full">
+        <i class="ph ph-arrow-counter-clockwise"></i> TRY AGAIN
+      </a>
+      <a href="https://wa.me/201157879622?text=Hi! My card payment failed for <?= urlencode($orderNum) ?>. Can I switch to Cash on Delivery?"
+         target="_blank" rel="noopener" class="btn btn-outline btn-full">
+        <i class="ph ph-whatsapp-logo" style="color:#25D366"></i> CONTACT US ON WHATSAPP
+      </a>
+    </div>
+  </div>
+
+  <?php else: ?>
   <!-- ── Success icon ──────────────────────────────────────────── -->
   <div style="text-align:center;margin-bottom:32px">
     <div style="width:80px;height:80px;background:rgba(40,167,69,0.15);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;border:2px solid #28A745">
       <i class="ph ph-check-circle" style="font-size:40px;color:#28A745"></i>
     </div>
-    <h1 style="font-size:28px;font-weight:700;margin-bottom:8px">Order Placed!</h1>
-    <p style="color:var(--text-muted);font-size:15px">Thank you for choosing DUHN FRAGRANCES. Your order has been received.</p>
+    <h1 style="font-size:28px;font-weight:700;margin-bottom:8px">Order <?= $paymentRes === 'success' ? 'Paid & Confirmed!' : 'Placed!' ?></h1>
+    <p style="color:var(--text-muted);font-size:15px">
+      <?= $paymentRes === 'success'
+          ? 'Your payment was successful. Thank you for your order!'
+          : 'Thank you for choosing DUHN FRAGRANCES. Your order has been received.' ?>
+    </p>
   </div>
+
+  <?php if ($paymentRes === 'success'): ?>
+  <!-- ── Card payment success badge ──────────────────────────── -->
+  <div style="background:rgba(40,167,69,0.08);border:1px solid rgba(40,167,69,0.25);border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+    <i class="ph ph-credit-card" style="color:#28A745;font-size:22px;flex-shrink:0"></i>
+    <div>
+      <div style="font-size:13px;font-weight:700;color:#28A745">Payment confirmed via Kashier</div>
+      <div style="font-size:12px;color:var(--text-muted)">Your card was charged successfully. A confirmation email has been sent.</div>
+    </div>
+  </div>
+  <?php endif; ?>
 
   <!-- ── Order box ─────────────────────────────────────────────── -->
   <?php if ($orderNum): ?>
@@ -33,7 +74,11 @@ require_once __DIR__ . '/public/layout/loader.php';
     <?php endif; ?>
     <div style="display:flex;justify-content:space-between">
       <span style="color:var(--text-muted);font-size:14px">Status</span>
+      <?php if ($paymentRes === 'success'): ?>
+      <span style="font-weight:700;color:#28A745">✓ Confirmed & Paid</span>
+      <?php else: ?>
       <span style="font-weight:700;color:#28A745">✓ Pending Confirmation</span>
+      <?php endif; ?>
     </div>
   </div>
   <?php endif; ?>
@@ -112,6 +157,9 @@ require_once __DIR__ . '/public/layout/loader.php';
       TRACK VIA WHATSAPP
     </a>
   </div>
+
+  <?php endif; // payment failed / success ?>
+
 </div>
 
 <?php

@@ -3,6 +3,19 @@
  * DUHN FRAGRANCES — Checkout Page
  */
 require_once __DIR__ . '/api/config/config.php';
+require_once __DIR__ . '/api/config/database.php';
+
+// Load Kashier settings
+$_kashierEnabled = false;
+$_kashierMode    = 'live';
+try {
+    $_kDb   = Database::getInstance();
+    $_kRows = $_kDb->query("SELECT `key`,`value` FROM settings WHERE `key` IN ('kashier_mid','kashier_api_key','kashier_mode')")->fetchAll();
+    $_kS    = [];
+    foreach ($_kRows as $_kr) $_kS[$_kr['key']] = $_kr['value'];
+    $_kashierEnabled = !empty($_kS['kashier_mid']) && !empty($_kS['kashier_api_key']);
+    $_kashierMode    = $_kS['kashier_mode'] ?? 'live';
+} catch (Throwable $_ke) {}
 
 $pageTitle = 'Checkout — DUHN FRAGRANCES';
 require_once __DIR__ . '/public/layout/header.php';
@@ -132,14 +145,28 @@ $governorates = [
             <span style="margin-left:auto;font-size:20px">💵</span>
           </label>
 
+          <?php if ($_kashierEnabled): ?>
+          <label id="card-payment-label" style="display:flex;align-items:center;gap:12px;padding:16px;border:1.5px solid var(--divider);border-radius:8px;cursor:pointer;transition:border-color .2s">
+            <input type="radio" name="payment_method" value="card" style="accent-color:var(--accent)" onchange="updatePaymentUI()">
+            <div>
+              <div style="font-size:15px;font-weight:700">Online Card Payment</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Visa · Mastercard · Meeza · Mobile Wallets</div>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+              <span style="font-size:11px;background:rgba(40,167,69,.15);color:#28a745;font-weight:700;padding:2px 8px;border-radius:10px">Secured by Kashier</span>
+              <span style="font-size:20px">💳</span>
+            </div>
+          </label>
+          <?php else: ?>
           <label style="display:flex;align-items:center;gap:12px;padding:16px;border:1.5px solid var(--divider);border-radius:8px;cursor:not-allowed;opacity:0.5">
             <input type="radio" name="payment_method" value="card" disabled style="accent-color:var(--accent)">
             <div>
               <div style="font-size:15px;font-weight:700">Credit / Debit Card</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">Coming soon</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">🔜 Coming soon</div>
             </div>
             <span style="margin-left:auto;font-size:20px">💳</span>
           </label>
+          <?php endif; ?>
         </div>
 
         <!-- Error Display -->
@@ -409,16 +436,21 @@ async function placeOrder() {
     const json = await res.json();
 
     if (json.success) {
-      // Handle auto-created guest account
+      // ── Card payment: redirect to Kashier HPP ──────────────────
+      if (json.data.kashier_redirect_url) {
+        btn.innerHTML = '<i class="ph ph-arrow-square-out"></i> Redirecting to payment...';
+        window.location.href = json.data.kashier_redirect_url;
+        return;
+      }
+
+      // ── COD: handle auto-created guest account ─────────────────
       if (json.data.auto_account) {
         const acct = json.data.auto_account;
         if (acct.type === 'created' && acct.token) {
-          // Auto-log the user in immediately with the JWT
           localStorage.setItem('duhn_token', acct.token);
           localStorage.setItem('duhn_user', JSON.stringify({
             name: acct.name, email: acct.email, role: 'customer'
           }));
-          // Store email so confirmation page can pre-fill set-password form
           sessionStorage.setItem('duhn_new_account_email', acct.email);
         } else if (acct.type === 'existing') {
           sessionStorage.setItem('duhn_existing_account', '1');
@@ -443,7 +475,29 @@ async function placeOrder() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadCheckoutCart);
+// Update payment method UI (border highlight + button label)
+function updatePaymentUI() {
+  const codLabel  = document.querySelector('label:has(input[value="cod"])');
+  const cardLabel = document.getElementById('card-payment-label');
+  const btn       = document.getElementById('place-order-btn');
+  const method    = document.querySelector('[name=payment_method]:checked')?.value;
+
+  if (codLabel)  codLabel.style.borderColor  = method === 'cod'  ? 'var(--accent)' : 'var(--divider)';
+  if (cardLabel) cardLabel.style.borderColor = method === 'card' ? 'var(--accent)' : 'var(--divider)';
+
+  if (method === 'card') {
+    btn.innerHTML = '<i class="ph ph-credit-card"></i> PAY WITH CARD';
+  } else {
+    btn.innerHTML = '<i class="ph ph-check-circle"></i> PLACE ORDER';
+  }
+}
+
+// Also wire the COD radio to updatePaymentUI
+document.addEventListener('DOMContentLoaded', () => {
+  loadCheckoutCart();
+  document.querySelectorAll('[name=payment_method]').forEach(r => r.addEventListener('change', updatePaymentUI));
+  updatePaymentUI();
+});
 </script>
 JS;
 require_once __DIR__ . '/public/layout/footer.php';

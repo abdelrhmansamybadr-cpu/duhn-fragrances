@@ -263,31 +263,20 @@ class OrderController
             }
             // ────────────────────────────────────────────────────────
 
-            // ── Email notification to admin ──────────────────────────
-            try {
-                $orderRow = [
-                    'order_number'    => $orderNumber,
-                    'customer_name'   => ValidationHelper::sanitize($body['customer_name']),
-                    'customer_email'  => filter_var($body['customer_email'] ?? '', FILTER_SANITIZE_EMAIL),
-                    'customer_phone'  => ValidationHelper::sanitize($body['customer_phone']),
-                    'delivery_address'=> ValidationHelper::sanitize($body['delivery_address']),
-                    'governorate'     => ValidationHelper::sanitize($body['governorate']),
-                    'subtotal'        => $subtotal,
-                    'discount'        => $discount,
-                    'delivery_fee'    => $deliveryFee,
-                    'total'           => $total,
-                    'payment_method'  => $body['payment_method'] ?? 'cod',
-                ];
-                Mailer::sendOrderNotification($orderRow, $cartItems);
-            } catch (Throwable $_mailErr) { /* never block the order response */ }
-
-            // ── Email confirmation to customer ───────────────────────
-            try {
-                if (!empty($orderRow['customer_email'])) {
-                    Mailer::sendOrderConfirmation($orderRow, $cartItems);
-                }
-            } catch (Throwable $_custMailErr) { /* never block the order response */ }
-            // ────────────────────────────────────────────────────────
+            $paymentMethod = $body['payment_method'] ?? 'cod';
+            $orderRow = [
+                'order_number'    => $orderNumber,
+                'customer_name'   => ValidationHelper::sanitize($body['customer_name']),
+                'customer_email'  => filter_var($body['customer_email'] ?? '', FILTER_SANITIZE_EMAIL),
+                'customer_phone'  => ValidationHelper::sanitize($body['customer_phone']),
+                'delivery_address'=> ValidationHelper::sanitize($body['delivery_address']),
+                'governorate'     => ValidationHelper::sanitize($body['governorate']),
+                'subtotal'        => $subtotal,
+                'discount'        => $discount,
+                'delivery_fee'    => $deliveryFee,
+                'total'           => $total,
+                'payment_method'  => $paymentMethod,
+            ];
 
             $resp = [
                 'order_number' => $orderNumber,
@@ -296,6 +285,65 @@ class OrderController
                 'status'       => 'pending',
             ];
             if ($autoAccount) $resp['auto_account'] = $autoAccount;
+
+            // ── Kashier online payment: generate HPP redirect URL ────
+            if ($paymentMethod === 'card') {
+                try {
+                    $kRows = $this->db->query(
+                        "SELECT `key`,`value` FROM settings WHERE `key` IN ('kashier_mid','kashier_api_key','kashier_mode')"
+                    )->fetchAll();
+                    $kS = [];
+                    foreach ($kRows as $kr) $kS[$kr['key']] = $kr['value'];
+
+                    $kMid    = $kS['kashier_mid']    ?? '';
+                    $kApiKey = $kS['kashier_api_key'] ?? '';
+                    $kMode   = $kS['kashier_mode']   ?? 'live';
+
+                    if ($kMid && $kApiKey) {
+                        // Mark order as pending_payment (awaiting Kashier confirmation)
+                        $this->db->prepare("UPDATE orders SET status='pending_payment' WHERE id=:id")
+                                 ->execute([':id' => $orderId]);
+
+                        $kAmount   = number_format($total, 2, '.', '');
+                        $kCurrency = 'EGP';
+                        // Use DB order ID as Kashier merchantOrderId
+                        $kPath   = "/?payment={$kMid}.{$orderId}.{$kAmount}.{$kCurrency}";
+                        $kHash   = hash_hmac('sha256', $kPath, $kApiKey, false);
+                        $kBase   = defined('APP_URL') ? APP_URL : 'https://duhnfragrances.com';
+                        $kParams = http_build_query([
+                            'merchantId'       => $kMid,
+                            'orderId'          => (string)$orderId,
+                            'amount'           => $kAmount,
+                            'currency'         => $kCurrency,
+                            'hash'             => $kHash,
+                            'merchantRedirect' => $kBase . '/kashier-callback.php',
+                            'allowedMethods'   => 'card,wallet,bank_installments',
+                            'display'          => 'en',
+                            'mode'             => $kMode,
+                            'description'      => 'Order ' . $orderNumber . ' — DUHN FRAGRANCES',
+                        ]);
+                        $resp['kashier_redirect_url'] = 'https://checkout.kashier.io/?' . $kParams;
+                        $resp['status'] = 'pending_payment';
+                    }
+                } catch (Throwable $_kErr) { /* if Kashier fails, still return order */ }
+
+                // For card orders, emails are sent after payment confirmed in kashier-callback.php
+                ResponseHelper::success($resp, 'Order created! Redirecting to payment...', 201);
+            }
+            // ────────────────────────────────────────────────────────
+
+            // ── Email notification to admin (COD only) ───────────────
+            try {
+                Mailer::sendOrderNotification($orderRow, $cartItems);
+            } catch (Throwable $_mailErr) { /* never block the order response */ }
+
+            // ── Email confirmation to customer (COD only) ────────────
+            try {
+                if (!empty($orderRow['customer_email'])) {
+                    Mailer::sendOrderConfirmation($orderRow, $cartItems);
+                }
+            } catch (Throwable $_custMailErr) { /* never block the order response */ }
+            // ────────────────────────────────────────────────────────
 
             ResponseHelper::success($resp, 'Order placed successfully!', 201);
 
